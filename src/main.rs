@@ -17,7 +17,9 @@ struct Fish {
     x: f64,
     y: f64,
     speed: f64,
-    direction: i32, // 1 for right, -1 for left
+    v_speed: f64,     // Added vertical speed
+    direction: i32,   // 1 for right, -1 for left
+    v_direction: i32, // 1 for down, -1 for up
     color: Color,
     fish_type: usize,
 }
@@ -62,19 +64,22 @@ impl Fish {
     fn new(w: u16, h: u16) -> Self {
         let mut rng = rand::thread_rng();
         Fish {
-            x: rng.gen_range(1.0..(w as f64 - 10.0)), // Ensure they don't spawn in wall
+            x: rng.gen_range(1.0..(w as f64 - 10.0)),
             y: rng.gen_range(1.0..(h as f64 - 2.0)),
-            speed: rng.gen_range(0.2..0.7), // Slightly faster max speed
+            speed: rng.gen_range(0.2..0.7),
+            v_speed: rng.gen_range(0.05..0.2), // Vertical movement is generally slower
             direction: if rng.gen_bool(0.5) { 1 } else { -1 },
+            v_direction: if rng.gen_bool(0.5) { 1 } else { -1 },
             color: COLORS[rng.gen_range(0..COLORS.len())],
             fish_type: rng.gen_range(0..FISH_SPRITES.len()),
         }
     }
 
-    fn update(&mut self, w: u16) {
+    fn update(&mut self, w: u16, h: u16) {
+        // Horizontal Movement
         self.x += self.speed * self.direction as f64;
 
-        // Bounce off walls
+        // Bounce off side walls
         let sprite_len = FISH_SPRITES[self.fish_type][0].len() as f64;
         
         if self.x <= 1.0 {
@@ -83,6 +88,26 @@ impl Fish {
         } else if self.x + sprite_len >= w as f64 {
             self.direction = -1;
             self.x = (w as f64) - sprite_len;
+        }
+
+        // Vertical Movement
+        self.y += self.v_speed * self.v_direction as f64;
+
+        // Bounce off top and bottom (Surface and Floor)
+        // 1.0 is top margin, h-2.0 is bottom margin (leaving room for floor)
+        if self.y <= 1.0 {
+            self.v_direction = 1; // Go down
+            self.y = 1.0;
+        } else if self.y >= (h as f64 - 2.0) {
+            self.v_direction = -1; // Go up
+            self.y = (h as f64) - 2.0;
+        }
+
+        // Add a small chance to randomly change vertical direction 
+        // This makes movement look more "organic" and less like a DVD screensaver
+        let mut rng = rand::thread_rng();
+        if rng.gen_bool(0.02) {
+            self.v_direction *= -1;
         }
     }
 
@@ -180,7 +205,7 @@ fn main() -> std::io::Result<()> {
 
         // Logic Updates
         for fish in &mut fishes {
-            fish.update(cols);
+            fish.update(cols, rows); // Passed 'rows' here for vertical bounds
         }
 
         // Add new bubbles randomly
