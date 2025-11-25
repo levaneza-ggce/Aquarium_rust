@@ -17,11 +17,20 @@ struct Fish {
     x: f64,
     y: f64,
     speed: f64,
-    v_speed: f64,     // Added vertical speed
+    v_speed: f64,
     direction: i32,   // 1 for right, -1 for left
     v_direction: i32, // 1 for down, -1 for up
     color: Color,
     fish_type: usize,
+}
+
+struct Shark {
+    x: f64,
+    y: f64,
+    speed: f64,
+    v_speed: f64,
+    direction: i32,
+    v_direction: i32,
 }
 
 struct Bubble {
@@ -35,6 +44,7 @@ struct Aquarium {
     height: u16,
     fishes: Vec<Fish>,
     bubbles: Vec<Bubble>,
+    sharks: Vec<Shark>,
 }
 
 // --- Constants & ASCII Art ---
@@ -48,6 +58,9 @@ const FISH_SPRITES: &[&[&str]] = &[
     &["*<"],                  // 6. Tiny
 ];
 
+// Simple ASCII Shark
+const SHARK_SPRITE: &str = r"____/^\____<"; 
+
 const COLORS: &[Color] = &[
     Color::Red,
     Color::Green,
@@ -55,10 +68,85 @@ const COLORS: &[Color] = &[
     Color::Blue,
     Color::Magenta,
     Color::Cyan,
-    Color::White, // Added White for variety
+    Color::White,
 ];
 
 // --- Implementation ---
+
+impl Shark {
+    fn new(w: u16, h: u16) -> Self {
+        let mut rng = rand::thread_rng();
+        Shark {
+            x: rng.gen_range(1.0..(w as f64 - 15.0)),
+            y: rng.gen_range(1.0..(h as f64 - 5.0)),
+            speed: rng.gen_range(0.4..0.8), // Sharks are generally faster
+            v_speed: rng.gen_range(0.05..0.2),
+            direction: if rng.gen_bool(0.5) { 1 } else { -1 },
+            v_direction: if rng.gen_bool(0.5) { 1 } else { -1 },
+        }
+    }
+
+    fn update(&mut self, w: u16, h: u16) {
+        self.x += self.speed * self.direction as f64;
+        self.y += self.v_speed * self.v_direction as f64;
+
+        let sprite_len = SHARK_SPRITE.len() as f64;
+
+        // Bounce horizontal
+        if self.x <= 1.0 {
+            self.direction = 1;
+            self.x = 1.0;
+        } else if self.x + sprite_len >= w as f64 {
+            self.direction = -1;
+            self.x = (w as f64) - sprite_len;
+        }
+
+        // Bounce vertical
+        if self.y <= 2.0 {
+            self.v_direction = 1;
+            self.y = 2.0;
+        } else if self.y >= (h as f64 - 3.0) {
+            self.v_direction = -1;
+            self.y = (h as f64) - 3.0;
+        }
+
+        // Randomly change vertical direction less frequently
+        let mut rng = rand::thread_rng();
+        if rng.gen_bool(0.01) {
+            self.v_direction *= -1;
+        }
+    }
+
+    fn draw<W: Write>(&self, out: &mut W) -> std::io::Result<()> {
+        let sprite = SHARK_SPRITE;
+        
+        // Flip sprite if moving right (default sprite faces left)
+        let final_sprite = if self.direction == 1 {
+             sprite.chars().rev().map(|c| {
+                match c {
+                    '<' => '>',
+                    '>' => '<',
+                    '/' => '\\',
+                    '\\' => '/',
+                    '(' => ')',
+                    ')' => '(',
+                    '{' => '}',
+                    '}' => '{',
+                    '[' => ']',
+                    ']' => '[',
+                    _ => c
+                }
+            }).collect::<String>()
+        } else {
+            sprite.to_string()
+        };
+
+        out.queue(MoveTo(self.x as u16, self.y as u16))?;
+        out.queue(SetForegroundColor(Color::DarkGrey))?;
+        out.queue(Print(final_sprite))?;
+        Ok(())
+    }
+}
 
 impl Fish {
     fn new(w: u16, h: u16) -> Self {
@@ -67,7 +155,7 @@ impl Fish {
             x: rng.gen_range(1.0..(w as f64 - 10.0)),
             y: rng.gen_range(1.0..(h as f64 - 2.0)),
             speed: rng.gen_range(0.2..0.7),
-            v_speed: rng.gen_range(0.05..0.2), // Vertical movement is generally slower
+            v_speed: rng.gen_range(0.05..0.2), 
             direction: if rng.gen_bool(0.5) { 1 } else { -1 },
             v_direction: if rng.gen_bool(0.5) { 1 } else { -1 },
             color: COLORS[rng.gen_range(0..COLORS.len())],
@@ -76,10 +164,9 @@ impl Fish {
     }
 
     fn update(&mut self, w: u16, h: u16) {
-        // Horizontal Movement
         self.x += self.speed * self.direction as f64;
+        self.y += self.v_speed * self.v_direction as f64;
 
-        // Bounce off side walls
         let sprite_len = FISH_SPRITES[self.fish_type][0].len() as f64;
         
         if self.x <= 1.0 {
@@ -90,21 +177,14 @@ impl Fish {
             self.x = (w as f64) - sprite_len;
         }
 
-        // Vertical Movement
-        self.y += self.v_speed * self.v_direction as f64;
-
-        // Bounce off top and bottom (Surface and Floor)
-        // 1.0 is top margin, h-2.0 is bottom margin (leaving room for floor)
         if self.y <= 1.0 {
-            self.v_direction = 1; // Go down
+            self.v_direction = 1; 
             self.y = 1.0;
         } else if self.y >= (h as f64 - 2.0) {
-            self.v_direction = -1; // Go up
+            self.v_direction = -1; 
             self.y = (h as f64) - 2.0;
         }
 
-        // Add a small chance to randomly change vertical direction 
-        // This makes movement look more "organic" and less like a DVD screensaver
         let mut rng = rand::thread_rng();
         if rng.gen_bool(0.02) {
             self.v_direction *= -1;
@@ -114,7 +194,6 @@ impl Fish {
     fn draw<W: Write>(&self, out: &mut W) -> std::io::Result<()> {
         let sprite = FISH_SPRITES[self.fish_type][0];
         
-        // Flip sprite if moving left (basic mirroring)
         let final_sprite = if self.direction == -1 {
             sprite.chars().rev().map(|c| {
                 match c {
@@ -145,14 +224,13 @@ impl Bubble {
         let mut rng = rand::thread_rng();
         Bubble {
             x: rng.gen_range(1.0..(w as f64 - 1.0)),
-            y: h as f64 - 1.0, // Start at bottom
+            y: h as f64 - 1.0, 
             speed: rng.gen_range(0.1..0.4),
         }
     }
 
     fn update(&mut self) {
         self.y -= self.speed;
-        // Wiggle effect
         let mut rng = rand::thread_rng();
         if rng.gen_bool(0.3) {
             self.x += rng.gen_range(-0.5..0.5);
@@ -178,9 +256,9 @@ fn main() -> std::io::Result<()> {
 
     let (mut cols, mut rows) = size()?;
     
-    // INCREASED FISH COUNT HERE: 30 Fish
+    // Initial Spawn
     let mut fishes: Vec<Fish> = (0..30).map(|_| Fish::new(cols, rows)).collect();
-    
+    let mut sharks: Vec<Shark> = (0..2).map(|_| Shark::new(cols, rows)).collect(); // 2 Sharks
     let mut bubbles: Vec<Bubble> = Vec::new();
     let mut rng = rand::thread_rng();
 
@@ -203,23 +281,49 @@ fn main() -> std::io::Result<()> {
             }
         }
 
-        // Logic Updates
+        // --- Logic Updates ---
+
+        // Update Fishes
         for fish in &mut fishes {
-            fish.update(cols, rows); // Passed 'rows' here for vertical bounds
+            fish.update(cols, rows);
         }
 
-        // Add new bubbles randomly
-        if rng.gen_bool(0.2) { // Increased bubble frequency slightly
+        // Update Sharks
+        for shark in &mut sharks {
+            shark.update(cols, rows);
+        }
+
+        // Update Bubbles
+        if rng.gen_bool(0.2) {
             bubbles.push(Bubble::new(cols, rows));
         }
-
-        // Update bubbles and remove those that hit the surface
         for bubble in &mut bubbles {
             bubble.update();
         }
         bubbles.retain(|b| b.y > 1.0);
 
-        // Render
+        // --- Collision Logic (Shark Eats Fish) ---
+        for shark in &sharks {
+            fishes.retain(|fish| {
+                let dx = (fish.x - shark.x).abs();
+                let dy = (fish.y - shark.y).abs();
+                
+                // If collision happens (Shark is big, so tolerance is higher)
+                // Shark mouth is near the front. Shark is ~12 chars wide.
+                // Simple box collision
+                let collision = dx < 8.0 && dy < 2.0;
+                
+                !collision // Keep fish if NO collision
+            });
+        }
+        
+        // Optional: Respawn fish if population gets too low
+        if fishes.len() < 5 {
+             fishes.push(Fish::new(cols, rows));
+        }
+
+
+        // --- Render ---
         stdout.queue(Clear(ClearType::All))?;
 
         // Draw Water Background
@@ -235,6 +339,10 @@ fn main() -> std::io::Result<()> {
             fish.draw(&mut stdout)?;
         }
 
+        for shark in &sharks {
+            shark.draw(&mut stdout)?;
+        }
+
         stdout.queue(ResetColor)?;
         stdout.flush()?;
     }
@@ -243,6 +351,6 @@ fn main() -> std::io::Result<()> {
     stdout.execute(Show)?;
     stdout.execute(Clear(ClearType::All))?;
     disable_raw_mode()?;
-    println!("Goodbye! Hope you enjoyed the crowded aquarium.");
+    println!("Goodbye!");
     Ok(())
 }
