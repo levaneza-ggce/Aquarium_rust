@@ -9,7 +9,6 @@ use rand::Rng;
 use std::{
     io::{stdout, Write},
     time::Duration,
-    thread,
 };
 
 // --- Structs ---
@@ -39,9 +38,12 @@ struct Aquarium {
 // --- Constants & ASCII Art ---
 
 const FISH_SPRITES: &[&[&str]] = &[
-    &["><>"],                 // Small fish
-    &["<°)))><"],             // Long fish
-    &["(Q)"],                 // Puffer fish logic (simplified)
+    &["><>"],                 // 1. Classic Small
+    &["<°)))><"],             // 2. Long
+    &["(Q)"],                 // 3. Puffer
+    &["><(('>"],              // 4. Medium
+    &["<###-<"],              // 5. Skeleton/Striped
+    &["*<"],                  // 6. Tiny
 ];
 
 const COLORS: &[Color] = &[
@@ -51,6 +53,7 @@ const COLORS: &[Color] = &[
     Color::Blue,
     Color::Magenta,
     Color::Cyan,
+    Color::White, // Added White for variety
 ];
 
 // --- Implementation ---
@@ -59,9 +62,9 @@ impl Fish {
     fn new(w: u16, h: u16) -> Self {
         let mut rng = rand::thread_rng();
         Fish {
-            x: rng.gen_range(1.0..(w as f64 - 5.0)),
+            x: rng.gen_range(1.0..(w as f64 - 10.0)), // Ensure they don't spawn in wall
             y: rng.gen_range(1.0..(h as f64 - 2.0)),
-            speed: rng.gen_range(0.2..0.6),
+            speed: rng.gen_range(0.2..0.7), // Slightly faster max speed
             direction: if rng.gen_bool(0.5) { 1 } else { -1 },
             color: COLORS[rng.gen_range(0..COLORS.len())],
             fish_type: rng.gen_range(0..FISH_SPRITES.len()),
@@ -86,7 +89,7 @@ impl Fish {
     fn draw<W: Write>(&self, out: &mut W) -> std::io::Result<()> {
         let sprite = FISH_SPRITES[self.fish_type][0];
         
-        // Flip sprite if moving left
+        // Flip sprite if moving left (basic mirroring)
         let final_sprite = if self.direction == -1 {
             sprite.chars().rev().map(|c| {
                 match c {
@@ -118,7 +121,7 @@ impl Bubble {
         Bubble {
             x: rng.gen_range(1.0..(w as f64 - 1.0)),
             y: h as f64 - 1.0, // Start at bottom
-            speed: rng.gen_range(0.1..0.3),
+            speed: rng.gen_range(0.1..0.4),
         }
     }
 
@@ -149,7 +152,10 @@ fn main() -> std::io::Result<()> {
     stdout.execute(Clear(ClearType::All))?;
 
     let (mut cols, mut rows) = size()?;
-    let mut fishes: Vec<Fish> = (0..10).map(|_| Fish::new(cols, rows)).collect();
+    
+    // INCREASED FISH COUNT HERE: 30 Fish
+    let mut fishes: Vec<Fish> = (0..30).map(|_| Fish::new(cols, rows)).collect();
+    
     let mut bubbles: Vec<Bubble> = Vec::new();
     let mut rng = rand::thread_rng();
 
@@ -178,7 +184,7 @@ fn main() -> std::io::Result<()> {
         }
 
         // Add new bubbles randomly
-        if rng.gen_bool(0.1) {
+        if rng.gen_bool(0.2) { // Increased bubble frequency slightly
             bubbles.push(Bubble::new(cols, rows));
         }
 
@@ -189,12 +195,9 @@ fn main() -> std::io::Result<()> {
         bubbles.retain(|b| b.y > 1.0);
 
         // Render
-        // We optimize by not clearing the whole screen every frame, 
-        // but for simplicity in this demo, we clear to avoid trails.
-        // A robust solution would clear only previous positions.
         stdout.queue(Clear(ClearType::All))?;
 
-        // Draw Water Background (Simple blue tint bottom line)
+        // Draw Water Background
         stdout.queue(MoveTo(0, rows-1))?;
         stdout.queue(SetForegroundColor(Color::DarkBlue))?;
         stdout.queue(Print("~".repeat(cols as usize)))?;
@@ -215,6 +218,6 @@ fn main() -> std::io::Result<()> {
     stdout.execute(Show)?;
     stdout.execute(Clear(ClearType::All))?;
     disable_raw_mode()?;
-    println!("Goodbye! Thanks for visiting the aquarium.");
+    println!("Goodbye! Hope you enjoyed the crowded aquarium.");
     Ok(())
 }
